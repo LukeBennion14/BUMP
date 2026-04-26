@@ -1,21 +1,17 @@
-//
-//  BumpAppApp.swift
-//  BumpApp
-//
-//  Created by Luke Bennion on 4/25/26.
-//
-
 import SwiftUI
-import CoreData
 
 @main
-struct BumpAppApp: App {
-    let persistenceController = PersistenceController.shared
+struct BumpAppMain: App {
+    @StateObject private var appState = AppState()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            RootView()
+                .environmentObject(appState)
+                .preferredColorScheme(.dark)
+                .task {
+                    appState.bootstrap()
+                }
         }
     }
 }
