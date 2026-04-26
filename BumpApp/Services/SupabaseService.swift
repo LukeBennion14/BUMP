@@ -140,11 +140,12 @@ final class SupabaseService {
     }
 
     func signIn(email: String, password: String) async throws {
-        let endpoint = config.url.appendingPathComponent("/auth/v1/token")
+        var components = URLComponents(url: config.url.appendingPathComponent("/auth/v1/token"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "grant_type", value: "password")]
+        let endpoint = components?.url ?? config.url.appendingPathComponent("/auth/v1/token")
         let payload: [String: String] = [
             "email": email,
-            "password": password,
-            "grant_type": "password"
+            "password": password
         ]
         let sessionResponse: SupabaseSession = try await request(
             endpoint: endpoint,
