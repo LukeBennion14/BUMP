@@ -140,9 +140,11 @@ final class SupabaseService {
     }
 
     func signIn(email: String, password: String) async throws {
-        let base = config.url.absoluteString.hasSuffix("/") ? String(config.url.absoluteString.dropLast()) : config.url.absoluteString
-        let endpoint = URL(string: base + "/auth/v1/token?grant_type=password")!
+        let endpoint = config.url.appendingPathComponent("/auth/v1/token")
+        // Supabase's GoTrue fork reads grant_type from the JSON body.
+        // Kong strips URL query params before forwarding to GoTrue.
         let payload: [String: String] = [
+            "grant_type": "password",
             "email": email,
             "password": password
         ]
