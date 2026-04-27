@@ -140,20 +140,46 @@ final class SupabaseService {
     }
 
     func signIn(email: String, password: String) async throws {
-        let endpoint = config.url.appendingPathComponent("/auth/v1/token")
-        // Supabase's GoTrue fork reads grant_type from the JSON body.
-        // Kong strips URL query params before forwarding to GoTrue.
-        let payload: [String: String] = [
-            "grant_type": "password",
-            "email": email,
-            "password": password
-        ]
-        let sessionResponse: SupabaseSession = try await request(
-            endpoint: endpoint,
-            method: "POST",
-            body: payload,
-            authorized: false
-        )
+        if usingFallbackConfig { throw SupabaseError.missingConfig }
+
+        // Build URL explicitly using URLComponents to avoid any path-encoding issues.
+        var components = URLComponents()
+        components.scheme = config.url.scheme ?? "https"
+        components.host = config.url.host
+        components.path = "/auth/v1/token"
+        components.queryItems = [URLQueryItem(name: "grant_type", value: "password")]
+        guard let endpoint = components.url else {
+            throw SupabaseError.api("Could not construct sign-in URL.")
+        }
+
+        let bodyDict: [String: String] = ["email": email, "password": password]
+        let bodyData = try JSONEncoder().encode(bodyDict)
+
+        var req = URLRequest(url: endpoint)
+        req.httpMethod = "POST"
+        req.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.httpBody = bodyData
+
+        print("DEBUG signIn → URL: \(endpoint.absoluteString)")
+        print("DEBUG signIn → body: \(String(data: bodyData, encoding: .utf8) ?? "nil")")
+
+        let (data, response) = try await urlSession.data(for: req)
+        print("DEBUG signIn → response: \(String(data: data, encoding: .utf8) ?? "nil")")
+
+        guard let http = response as? HTTPURLResponse else { throw SupabaseError.malformedResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = (object["msg"] as? String)
+                   ?? (object["error_description"] as? String)
+                   ?? (object["message"] as? String) {
+                throw SupabaseError.api(message)
+            }
+            throw SupabaseError.api("Sign-in failed (\(http.statusCode)).")
+        }
+
+        let sessionResponse = try JSONDecoder().decode(SupabaseSession.self, from: data)
         self.session = sessionResponse
         saveSession(sessionResponse)
     }
